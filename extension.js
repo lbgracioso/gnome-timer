@@ -21,7 +21,6 @@ import St from 'gi://St';
 import GObject from 'gi://GObject';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
-import Gst from 'gi://Gst';
 import GLib from 'gi://GLib';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -30,9 +29,10 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 class TimerMenu extends PopupMenu.PopupMenu {
-    constructor(sourceActor, arrowAlignment, arrowSide, button) {
+    constructor(sourceActor, arrowAlignment, arrowSide, button, extensionPath) {
         super(sourceActor, arrowAlignment, arrowSide);
         this._button = button;
+        this._extensionPath = extensionPath;
 
         // ────────────────────────── MENU CONTAINER
         let menuvbox = this._createMenuContainer();
@@ -137,17 +137,14 @@ class TimerMenu extends PopupMenu.PopupMenu {
     
     // ────────────────────────── ALARM SOUND
     _playAlarmSound() {
-        let alarmFilePath = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'share', 'gnome-shell', 'extensions', 'timer@lbgracioso.net', 'alarm.ogg']);
-        let alarmFile = Gio.file_new_for_path(alarmFilePath);
-
-        let player = Gst.ElementFactory.make('playbin', 'player');
-        player.set_property('uri', 'file://' + alarmFile.get_path());
-
-        player.set_state(Gst.State.PLAYING);
+        let alarmFilePath = GLib.build_filenamev([this._extensionPath, 'alarm.ogg']);
+        let file = Gio.File.new_for_path(alarmFilePath);
         
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10000, () => {
-            player.set_state(Gst.State.NULL);
-            return GLib.SOURCE_REMOVE;  
+        let player = global.display.get_sound_player(); 
+        player.play_from_file(file, 'Alarm', null);
+        
+        this._alarmTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10000, () => {
+            return GLib.SOURCE_REMOVE;
         });
     }
     
@@ -225,37 +222,54 @@ class TimerMenu extends PopupMenu.PopupMenu {
         if (time.length > 0) {
             let durationInSeconds = this._parseTime(time);
             if (durationInSeconds > 0 ) {
-                log(`[TIMER EXTENSION] Starting timer for: ${time}`); 
+                console.log(`[TIMER EXTENSION] Starting timer for: ${time}`); 
                 this._timerState = TimerState.Running;
                 this._remainingTime = durationInSeconds;
                 this._startCountdown();
                 this._timerEntry.set_text('');                            
             } else {
-                log('[TIMER EXTENSION] Invalid time format.');
+                console.log ('[TIMER EXTENSION] Invalid time format.');
             }
         }
     }
 
     pauseTimer() {
-        log('[TIMER EXTENSION] Timer paused');
+        console.log('[TIMER EXTENSION] Timer paused');
         clearInterval(this._timerInterval);
         this._timerState = TimerState.Paused;
         this._updateTitleWithString('Paused');
     }
     
     resumeTimer() {
-        log('[TIMER EXTENSION] Timer resumed');
+        console.log('[TIMER EXTENSION] Timer resumed');
         this._timerState = TimerState.Running;
         this._startCountdown(); 
     }
 
     stopTimer() {
-        log('[TIMER EXTENSION] Timer stopped');
-        clearInterval(this._timerInterval);
+        console.log('[TIMER EXTENSION] Timer stopped');
+        if (this._timerInterval) {
+            clearInterval(this._timerInterval);
+            this._timerInterval = null;
+        }
         this._timerState = TimerState.Stopped;
         this._remainingTime = 0;
         this._timerEntry.set_text('');
         this._updateTitleWithString('Timer');
+    } 
+    
+    destroy() {
+        if (this._timerInterval) {
+            clearInterval(this._timerInterval);
+            this._timerInterval = null;
+        }
+        
+        if (this._alarmTimeoutId) {
+            GLib.Source.remove(this._alarmTimeoutId);
+            this._alarmTimeoutId = null;
+        }
+        
+        super.destroy();
     }
 }
 
@@ -270,7 +284,7 @@ class TimerButton extends PanelMenu.Button {
         GObject.registerClass(this);
     }
 
-    constructor() {
+    constructor(extensionPath) {
         super(0.0, _('Timer'));
 
         this._label = new St.Label({
@@ -281,20 +295,30 @@ class TimerButton extends PanelMenu.Button {
 
         this.add_child(this._label);
 
-        this.setMenu(new TimerMenu(this, 1.0, St.Side.TOP, this));
+        this._menu = new TimerMenu(this, 1.0, St.Side.TOP, this, extensionPath);
+        this.setMenu(this._menu);
+    }
+    
+    destroy() {
+        if (this._menu) {
+            this._menu.destroy();
+            this._menu = null;
+        }
+        super.destroy();
     }
 }
 
 export default class TimerExtension extends Extension {
     enable() {
-        Gst.init(null);
-        this._indicator = new TimerButton();
+        this._indicator = new TimerButton(this.path);
         Main.panel.addToStatusArea('panelTimer', this._indicator);
     }
 
     disable() {
-        this._indicator?.destroy();
-        this._indicator = null;
+        if (this._indicator) {  
+            this._indicator.destroy();
+            this._indicator = null;
+        }
     }
 }
 

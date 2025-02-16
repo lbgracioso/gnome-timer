@@ -3,11 +3,15 @@
 A simple GNOME extension that provides a panel timer with an alarm sound notification.
 ![Usage gif.](docs/usage.gif)
 
+👉 **Download from GNOME Extensions:** [Timer on GNOME Extensions](https://extensions.gnome.org/extension/7858/timer/)
+
 ## Features
 - **Single time units**: Use simple time formats like '1h', '1m', or '1s'.
 - **Multiple time units**: Combine units, such as '1h 30m', '1m 25s', or '1h 20m 30s'.
 
 ## Usage
+📥 **Download:** You can install the extension directly from the [GNOME Extensions website](https://extensions.gnome.org/extension/7858/timer/).
+
 To start the timer:
 1. Input the desired duration in the format(s) mentioned above.
 2. Click on the **Start** icon to begin the countdown.
