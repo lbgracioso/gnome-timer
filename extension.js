@@ -33,6 +33,7 @@ class TimerMenu extends PopupMenu.PopupMenu {
         super(sourceActor, arrowAlignment, arrowSide);
         this._button = button;
         this._extensionPath = extensionPath;
+        this._alarmTimeoutId = null;
 
         // ────────────────────────── MENU CONTAINER
         let menuvbox = this._createMenuContainer();
@@ -56,7 +57,11 @@ class TimerMenu extends PopupMenu.PopupMenu {
         
         // ────────────────────────── TIMER STATE
         this._timerState = TimerState.Stopped;
+        this._durationInSeconds = 0;
+        this._currentRep = 0;
         this._remainingTime = 0;
+        this._remainingReps = 0;
+        this._restTime = 0;
         this._timerInterval = null;
     }
 
@@ -74,7 +79,7 @@ class TimerMenu extends PopupMenu.PopupMenu {
         });
 
         this._timerEntry = new St.Entry({
-            hint_text: _('Set Timer ...'),
+            hint_text: _('1h; 1m; 1s; rep1; rest1s...'),
             can_focus: true,
             x_expand: true,
             style_class: 'menu-entry',
@@ -137,12 +142,17 @@ class TimerMenu extends PopupMenu.PopupMenu {
     
     // ────────────────────────── ALARM SOUND
     _playAlarmSound() {
+        if (this._alarmTimeoutId) {
+            GLib.Source.remove(this._alarmTimeoutId);
+            this._alarmTimeoutId = null;
+        }
+
         let alarmFilePath = GLib.build_filenamev([this._extensionPath, 'alarm.ogg']);
         let file = Gio.File.new_for_path(alarmFilePath);
-        
+
         let player = global.display.get_sound_player(); 
         player.play_from_file(file, 'Alarm', null);
-        
+
         this._alarmTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10000, () => {
             return GLib.SOURCE_REMOVE;
         });
@@ -150,7 +160,16 @@ class TimerMenu extends PopupMenu.PopupMenu {
     
     // ────────────────────────── UPDATE TITLE
     _updateTitleWithTime(hours, minutes, seconds) {
-        let formattedTime = `${this._padTime(hours)}:${this._padTime(minutes)}:${this._padTime(seconds)}`;
+        let extra = "";
+        if (this._remainingReps > 0) {
+            extra = `${this._currentRep + 1}:`
+        }
+        
+        if (this._timerState == TimerState.Resting) {
+            extra = `Rest:`
+        }
+        
+        let formattedTime = `${extra} ${this._padTime(hours)}:${this._padTime(minutes)}:${this._padTime(seconds)}`;
         this._button._label.text = formattedTime;
     }
     
@@ -163,38 +182,94 @@ class TimerMenu extends PopupMenu.PopupMenu {
     }
   
     // ────────────────────────── TIMER COUNTDOWN
-    _startCountdown(durationInSeconds) {
+    _startCountdown() {
         if (this._timerInterval) {
             clearInterval(this._timerInterval);
         }
-    
+
         this._timerInterval = setInterval(() => {
-            let remainingTime = this._remainingTime;
-            let hours = Math.floor(remainingTime / 3600);
-            let minutes = Math.floor((remainingTime % 3600) / 60);
-            let seconds = remainingTime % 60;
-  
-            this._updateTitleWithTime(hours, minutes, seconds);
+            this._updateCountdown();
+        }, 1000);
+    }
 
-            if (remainingTime <= 0) {
-                clearInterval(this._timerInterval);
-                this._updateTitleWithString('Timer'); 
-                this._timerState = TimerState.Stopped;
-                this._playAlarmSound();
-            }
+    // Handles the countdown logic
+    _updateCountdown() {
+        let remainingTime = this._remainingTime;
+        let remainingReps = this._remainingReps;
+        let hours = Math.floor(remainingTime / 3600);
+        let minutes = Math.floor((remainingTime % 3600) / 60);
+        let seconds = remainingTime % 60;
 
+        this._updateTitleWithTime(hours, minutes, seconds);
+
+        if (remainingTime <= 0) {
+            this._handleTimerState();
+        } else {
             this._remainingTime--;
-        }, 1000); 
+        }
+    }
+
+    // Handles the logic when time reaches 0
+    _handleTimerState() {
+        if (this._timerState === TimerState.Resting) {
+            this._handleRestEnd();
+        } else if (this._timerState === TimerState.Running) {
+            this._handleWorkEnd();
+        }
+    }
+
+    // Handles when a work session ends (transition to rest or next rep)
+    _handleWorkEnd() {
+        if (this._restTime > 0) {
+            this._timerState = TimerState.Resting;
+            this._remainingTime = this._restTime;
+        } else {
+            this._moveToNextRep();
+        }
+    }
+
+    // Handles when a rest session ends (transition to next rep or stop)
+    _handleRestEnd() {
+        if (this._remainingReps > 0) {
+            this._remainingReps--;
+            this._currentRep++;
+            console.log(`[TIMER EXTENSION] Starting rep ${this._currentRep} of ${this._remainingReps}`);
+            this._moveToNextState();
+        } else {
+            this.stopTimerPlayAlarm();
+        }
+    }
+
+    // Moves to the next rep or stops the timer if no reps are left
+    _moveToNextRep() {
+        this._remainingReps--;
+        this._currentRep++;
+        console.log(`[TIMER EXTENSION] Starting rep ${this._currentRep} of ${this._remainingReps}`);
+
+        if (this._remainingReps > 0) {
+            this._remainingTime = this._durationInSeconds;
+            this._timerState = TimerState.Running;
+        } else {
+            this.stopTimerPlayAlarm();
+        }
+    }
+
+    // Moves to the next state based on the timer's current state
+    _moveToNextState() {
+        if (this._remainingReps > 0) {
+            this._remainingTime = this._durationInSeconds;
+            this._timerState = TimerState.Running;
+        } else {
+            this.stopTimerPlayAlarm();
+        }
     }
     
-    // ────────────────────────── TIME PARSER
-    // User can input single time unit such as '1h', '1m', '1s'
-    // or multiple time units such as '1h 1m 1s', etc.
-    _parseTime(timeString) {
-        let regex = /(\d+)([hms])/g;
+    // ────────────────────────── TIME PARSER (for work time: 5s, 1m, 1h)
+    _parseTimeUnits(timeString) {
+        let regex = /(\d+)([hms])/g; // 'h', 'm', or 's'
         let match;
         let totalSeconds = 0;
-        
+
         while ((match = regex.exec(timeString)) !== null) {
             let value = parseInt(match[1]);
             let unit = match[2];
@@ -216,19 +291,82 @@ class TimerMenu extends PopupMenu.PopupMenu {
 
         return totalSeconds;
     }
+
+    parseTimer(timeString) {
+        let restTimeInSeconds = 0;
+        let repetitions = 0;
+        let durationInSeconds = 0;
+
+        let restMatch = timeString.match(/rest(\d+)([hms])/);
+        if (restMatch) {
+            restTimeInSeconds = this._parseRestTime(restMatch[0]);
+            timeString = timeString.replace(restMatch[0], '');
+        }
+        
+        let repMatch = timeString.match(/(rep)(\d+)/);
+        if (repMatch) {
+            repetitions = parseInt(repMatch[2]);
+            timeString = timeString.replace(repMatch[0], '');
+        }
+
+        durationInSeconds = this._parseTimeUnits(timeString);
+
+        this._durationInSeconds = durationInSeconds;
+        this._remainingReps = repetitions;
+        this._restTime = restTimeInSeconds;
+
+        return timeString.trim();
+    }
+
+
+    // ────────────────────────── REST PARSER (for rest time: rest1m, rest1h, rest1s)
+    _parseRestTime(timeString) {
+        let regex = /rest(\d+)([hms])/g;  // match "restXY" (where X is a number followed by a Y unit h/m/s)
+        let match;
+        let totalRestTime = 0;
+
+        while ((match = regex.exec(timeString)) !== null) {
+            let value = match[1];
+            let unit = match[2];
+
+            let restTimeStr = value + unit;
+
+            totalRestTime += this._parseTimeUnits(restTimeStr);
+            
+            timeString = timeString.replace(match[0], '');
+        }
+
+        return totalRestTime;
+    }
+
+    // ────────────────────────── REPETITION PARSER (for repetitions: rep2)
+    _parseRepetition(timeString) {
+        let regex = /(rep)(\d+)/g;  // match "repX" (where X is a number)
+        let match;
+        let totalRepetitions = 0;
+
+        while ((match = regex.exec(timeString)) !== null) {
+            let value = parseInt(match[2]);
+            totalRepetitions += value;
+        }
+
+        return totalRepetitions;
+    }
   
     startTimer() {
         let time = this._timerEntry.get_text().trim();
         if (time.length > 0) {
-            let durationInSeconds = this._parseTime(time);
-            if (durationInSeconds > 0 ) {
-                console.log(`[TIMER EXTENSION] Starting timer for: ${time}`); 
+            let updatedTimeString = this.parseTimer(time);
+
+            if (this._durationInSeconds > 0) {
+                console.log(`[TIMER EXTENSION] Starting timer for: ${updatedTimeString}`);
                 this._timerState = TimerState.Running;
-                this._remainingTime = durationInSeconds;
+                this._remainingTime = this._durationInSeconds;
+                this._currentRep = 0;
                 this._startCountdown();
-                this._timerEntry.set_text('');                            
+                this._timerEntry.set_text('');
             } else {
-                console.log ('[TIMER EXTENSION] Invalid time format.');
+                console.log('[TIMER EXTENSION] Invalid time format.');
             }
         }
     }
@@ -254,9 +392,16 @@ class TimerMenu extends PopupMenu.PopupMenu {
         }
         this._timerState = TimerState.Stopped;
         this._remainingTime = 0;
+        this._remainingReps = 0;
+        this._currentRep = 0;
         this._timerEntry.set_text('');
         this._updateTitleWithString('Timer');
     } 
+    
+    stopTimerPlayAlarm() {
+        this.stopTimer();
+        this._playAlarmSound();
+    }
     
     destroy() {
         if (this._timerInterval) {
@@ -276,7 +421,8 @@ class TimerMenu extends PopupMenu.PopupMenu {
 const TimerState = {
     Running: Symbol("Running"),
     Paused: Symbol("Paused"),
-    Stopped: Symbol("Stopped")
+    Stopped: Symbol("Stopped"),
+    Resting: Symbol("Resting")
 };
 
 class TimerButton extends PanelMenu.Button {
@@ -315,7 +461,7 @@ export default class TimerExtension extends Extension {
     }
 
     disable() {
-        if (this._indicator) {  
+        if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;
         }
