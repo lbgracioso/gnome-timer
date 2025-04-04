@@ -13,16 +13,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Changed
 - Improved `README.md` and docs
 
----
-
 ## [1.1.0] – 2025-02-28
 ### Added
 - Support for repetitions (`repX`) and rest periods (`restX`)
 
 ### Changed
 - Improved time format
-
----
 
 ## [1.0.0] – 2025-02-16
 ### Added
