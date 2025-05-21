@@ -4,6 +4,7 @@
   "uuid": "timer@lbgracioso.net",
   "url": "http://github.com/lbgracioso/gnome-timer",
   "shell-version": [
-    "47"
+    "47",
+    "48"
   ]
 }
