@@ -15,9 +15,9 @@ rm -f "$ZIP_NAME"
 zip "$ZIP_NAME" "${FILES[@]}"
 
 if [[ $? -eq 0 ]]; then
-  echo "Extensão empacotada com sucesso em $ZIP_NAME"
+  echo "Timer packaged - $ZIP_NAME"
 else
-  echo "Falha ao empacotar a extensão."
+  echo "Failed to package."
   exit 1
 fi
 
