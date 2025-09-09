@@ -293,23 +293,35 @@ class TimerMenu extends PopupMenu.PopupMenu {
     }
 
     parseTimer(timeString) {
+        let tokens = timeString.split(/\s+/).filter(t => t.length > 0);
+        let valid = true;
         let restTimeInSeconds = 0;
         let repetitions = 0;
         let durationInSeconds = 0;
 
-        let restMatch = timeString.match(/rest(\d+)([hms])/);
-        if (restMatch) {
-            restTimeInSeconds = this._parseRestTime(restMatch[0]);
-            timeString = timeString.replace(restMatch[0], '');
-        }
-        
-        let repMatch = timeString.match(/(rep)(\d+)/);
-        if (repMatch) {
-            repetitions = parseInt(repMatch[2]);
-            timeString = timeString.replace(repMatch[0], '');
+        for (let token of tokens) {
+            if (/^\d+[hms]$/.test(token)) {
+                durationInSeconds += this._parseTimeUnits(token);
+            } else if (/^rep\d+$/.test(token)) {
+                repetitions = parseInt(token.replace('rep', ''));
+            } else if (/^rest\d+[hms]$/.test(token)) {
+                restTimeInSeconds += this._parseRestTime(token);
+            } else {
+                valid = false;
+                break;
+            }
         }
 
-        durationInSeconds = this._parseTimeUnits(timeString);
+        if (!valid || durationInSeconds === 0) {
+            this._timerEntry.add_style_class_name('timer-entry-error');
+            console.log('[TIMER EXTENSION] Invalid time format.');
+            this._durationInSeconds = 0;
+            this._remainingReps = 0;
+            this._restTime = 0;
+            return null;
+        }
+
+        this._timerEntry.remove_style_class_name('timer-entry-error');
 
         this._durationInSeconds = durationInSeconds;
         this._remainingReps = repetitions;
@@ -366,7 +378,6 @@ class TimerMenu extends PopupMenu.PopupMenu {
                 this._startCountdown();
                 this._timerEntry.set_text('');
             } else {
-                this._timerEntry.set_text('Invalid time format');
                 console.log('[TIMER EXTENSION] Invalid time format.');
             }
         }
