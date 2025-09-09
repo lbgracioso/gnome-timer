@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Added
 - Initial `CHANGELOG.md`
 - Planned feature list in `roadmap.md`
+- New shellscript `run-dev.sh`
+- Invalid timer feedback - if everything is wrong, it won't start and will display a error message. If at least one option is right, it will work.
 
 ### Changed
 - Improved `README.md` and docs

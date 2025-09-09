@@ -1,5 +1,5 @@
 /* extension.js
- * Created by Lucas Gracioso <contact@lbgracioso.net>
+ * Created by Lucas Gracioso <lucas@gracioso.net.br>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -366,6 +366,7 @@ class TimerMenu extends PopupMenu.PopupMenu {
                 this._startCountdown();
                 this._timerEntry.set_text('');
             } else {
+                this._timerEntry.set_text('Invalid time format');
                 console.log('[TIMER EXTENSION] Invalid time format.');
             }
         }
