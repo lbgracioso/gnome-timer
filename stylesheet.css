@@ -16,3 +16,9 @@
     padding: 10px;
     color: white;
 }
+
+.timer-entry-error {
+    border: 1px solid red;
+    color: red;
+}
+

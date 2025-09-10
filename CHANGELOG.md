@@ -6,9 +6,13 @@ This project follows [Semantic Versioning](https://semver.org/).
 ---
 
 ## [Unreleased]
+
+## [1.2.0] - 2025-09-09
 ### Added
 - Initial `CHANGELOG.md`
 - Planned feature list in `roadmap.md`
+- New shellscript `run-dev.sh`
+- Invalid timer feedback
 
 ### Changed
 - Improved `README.md` and docs
