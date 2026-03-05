@@ -1,5 +1,5 @@
 /* extension.js
- * Created by Lucas Gracioso <lucas@gracioso.net.br>
+ * Created by Lucas Gracioso <https://github.com/lbgracioso/gnome-timer>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
